@@ -10,7 +10,7 @@ import time
 # ==========================================
 st.set_page_config(page_title="3D梁柱变形分析平台", layout="wide")
 
-# 彻底移除中文字体配置，确保 Linux 服务器渲染不崩溃
+# 移除中文字体配置，确保 Linux 服务器渲染纯英文时不报错
 plt.rcParams['axes.unicode_minus'] = False
 
 if 'view_angles' not in st.session_state:
@@ -19,7 +19,18 @@ if 'action' not in st.session_state:
     st.session_state.action = None
 
 # ==========================================
-# 1. 物理引擎核心库 (计算逻辑完全不变)
+# 1. 中英文字典映射 (用于图表内文字显示)
+# ==========================================
+EN_STRUCT = {"梁": "Beam", "柱": "Column"}
+EN_LOAD = {"拉压": "Axial", "剪切": "Shear", "弯曲": "Bending", "扭转": "Torsion", "无": "None"}
+EN_SEC = {
+    "矩形": "Rectangular", "圆形": "Circular", "空心矩形": "Hollow Rect",
+    "椭圆管": "Elliptical Tube", "L形": "L-Shape", "U形(槽钢)": "U-Shape (Channel)",
+    "十字形": "Cross-Shape", "T形": "T-Shape", "工字形": "I-Shape"
+}
+
+# ==========================================
+# 2. 物理引擎核心库 (计算逻辑完全不变)
 # ==========================================
 class TeachingPhysics:
     @staticmethod
@@ -76,15 +87,18 @@ class TeachingPhysics:
             vs = np.array([-b / 2, -b / 2, -b / 2 + t2, -b / 2 + t2, b / 2 - t1, b / 2 - t1, b / 2, b / 2, b / 2 - t1, b / 2 - t1, -b / 2 + t2, -b / 2 + t2])
         else:
             us = np.array([-a / 2, a / 2, a / 2, -a / 2]); vs = np.array([-b / 2, -b / 2, b / 2, b / 2])
+        
         A, I_u, J = TeachingPhysics.calc_section_properties(us, vs)
         A_ref, I_ref, J_ref = 0.08, 0.001066, 0.0013
         scale_axial = np.clip(A_ref / A, 0.1, 10.0)
         scale_bend = np.clip(I_ref / I_u, 0.1, 20.0)
         scale_twist = np.clip(J_ref / J, 0.1, 20.0)
+        
         n_long = 40; long_coords = np.linspace(0, L, n_long)
         nodes = []; faces = []; face_disps = []
         load_eff = load_val * factor
         node_disps = np.zeros((n_long, len(us)))
+        
         for i in range(len(long_coords)):
             s = long_coords[i]
             cur_us, cur_vs = us.copy(), vs.copy(); cur_s = np.full_like(us, s)
@@ -119,8 +133,10 @@ class TeachingPhysics:
                 disp = np.sqrt((cur_s - s) ** 2 + (cur_us - us) ** 2 + (cur_vs - vs) ** 2)
                 for j in range(len(us)): nodes.append([cur_us[j], cur_vs[j], cur_s[j]])
             node_disps[i, :] = disp
+            
         nodes = np.array(nodes); n_prof = len(us)
         max_disp = np.max(node_disps) if np.max(node_disps) > 1e-9 else 1.0
+        
         for i in range(n_long - 1):
             base = i * n_prof; next_base = (i + 1) * n_prof
             for j in range(n_prof):
@@ -128,21 +144,24 @@ class TeachingPhysics:
                 faces.append([nodes[base + j], nodes[base + j_next], nodes[next_base + j_next], nodes[next_base + j]])
                 avg_d = (node_disps[i, j] + node_disps[i, j_next] + node_disps[i + 1, j_next] + node_disps[i + 1, j]) / 4.0
                 face_disps.append(avg_d / max_disp)
+                
         faces.append([nodes[j] for j in range(n_prof)][::-1])
         face_disps.append(np.mean(node_disps[0, :]) / max_disp)
         faces.append([nodes[(n_long - 1) * n_prof + j] for j in range(n_prof)])
         face_disps.append(np.mean(node_disps[-1, :]) / max_disp)
+        
         visuals = []
         if struct_type == '柱': visuals.append({'type': 'fixed_base', 'pos': np.array([0, 0, 0]), 'size': max(a, b) * 2})
         return nodes, faces, face_disps, visuals
 
 # ==========================================
-# 2. 绘图函数 (纯英文/数字渲染)
+# 3. 绘图函数 (标题和图例全英文，图文不剥离)
 # ==========================================
-def create_plot(nodes, faces, face_disps, visuals, L, s_type, color_mode, is_initial=False):
+def create_plot(nodes, faces, face_disps, visuals, L, s_type, color_mode, title_en):
     fig = plt.figure(figsize=(8, 6), dpi=100)
     fig.patch.set_facecolor('#f5f5f5')
     ax = fig.add_subplot(111, projection='3d')
+    ax.set_title(title_en, pad=15, fontsize=12, fontweight='bold')
 
     if len(faces) > 0:
         if color_mode == '变形位移云图(按大小着色)':
@@ -151,10 +170,9 @@ def create_plot(nodes, faces, face_disps, visuals, L, s_type, color_mode, is_ini
             mesh = Poly3DCollection(faces, alpha=0.9, facecolor=colors, edgecolor='k', linewidths=0.1)
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=1))
             cbar = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.04)
-            # 使用英文标签，防止乱码
             cbar.set_label('Displacement (Normalized)', rotation=270, labelpad=15)
         else:
-            color = '#dddddd' if is_initial else '#4db8ff'
+            color = '#dddddd' if 'Initial' in title_en else '#4db8ff'
             mesh = Poly3DCollection(faces, alpha=0.8, facecolor=color, edgecolor='k', linewidths=0.2)
         ax.add_collection3d(mesh)
 
@@ -180,7 +198,7 @@ def create_plot(nodes, faces, face_disps, visuals, L, s_type, color_mode, is_ini
     return fig
 
 # ==========================================
-# 3. Streamlit 侧边栏与交互 UI
+# 4. Streamlit 侧边栏与交互 UI (保持纯中文)
 # ==========================================
 st.sidebar.title("参数配置")
 model_type = st.sidebar.radio("选择模型类型", ["水平梁 (两端无约束)", "竖直柱 (底部固定)"])
@@ -220,11 +238,10 @@ with c2:
     if st.button("▶ 播放变形动画", use_container_width=True): st.session_state.action = 'anim'
 
 # ==========================================
-# 4. 主视窗渲染区 (原生组件显示中文)
+# 5. 主视窗渲染区
 # ==========================================
 st.title("3D 梁柱变形分析平台")
 
-# 视角控制面板 (原生组件)
 v_cols = st.columns([1, 1, 1, 5])
 with v_cols[0]:
     if st.button("主视图"): st.session_state.view_angles = {'elev': 20, 'azim': -60}
@@ -233,30 +250,25 @@ with v_cols[1]:
 with v_cols[2]:
     if st.button("前视图"): st.session_state.view_angles = {'elev': 0, 'azim': -90}
 
-# 动态标题容器 (原生组件)
-title_container = st.container()
 plot_placeholder = st.empty()
 
-# 逻辑执行
 if st.session_state.action is None:
     plot_placeholder.info("👈 请配置左侧参数并点击按钮生成模型")
 
 elif st.session_state.action == 'init':
-    with title_container:
-        st.subheader(f"🏗️ {struct_type} 初始几何模型")
-        st.markdown(f"**当前截面：** {sec_type} | **长度：** {L}m")
-    
     nodes, faces, face_disps, visuals = TeachingPhysics.generate_component_mesh(L, sec_type, dims, '无', 0, struct_type, factor=0)
-    fig = create_plot(nodes, faces, face_disps, visuals, L, struct_type, color_mode='纯色显示', is_initial=True)
+    
+    # 转换为英文标题
+    en_title = f"{EN_STRUCT[struct_type]} Model (Initial) - {EN_SEC[sec_type]}"
+    fig = create_plot(nodes, faces, face_disps, visuals, L, struct_type, color_mode='纯色显示', title_en=en_title)
     plot_placeholder.pyplot(fig)
 
 elif st.session_state.action == 'calc':
-    with title_container:
-        st.subheader(f"📊 {struct_type} 变形分析结果")
-        st.markdown(f"**受力类型：** {load_type} | **荷载幅值：** {load_val}")
-    
     nodes, faces, face_disps, visuals = TeachingPhysics.generate_component_mesh(L, sec_type, dims, load_type, load_val, struct_type, factor=1.0)
-    fig = create_plot(nodes, faces, face_disps, visuals, L, struct_type, color_mode=render_mode)
+    
+    # 转换为英文标题
+    en_title = f"{EN_STRUCT[struct_type]} Response: {EN_LOAD[load_type]} ({EN_SEC[sec_type]})"
+    fig = create_plot(nodes, faces, face_disps, visuals, L, struct_type, color_mode=render_mode, title_en=en_title)
     plot_placeholder.pyplot(fig)
 
 elif st.session_state.action == 'anim':
@@ -265,12 +277,12 @@ elif st.session_state.action == 'anim':
         factor = i / float(anim_steps)
         current_color_mode = '纯色显示' if factor < 0.1 else render_mode
         
-        with title_container:
-            st.subheader(f"🎬 动态仿真：{struct_type} {load_type} 响应")
-            st.markdown(f"**动画进度：** `{factor*100:.0f}%` (Factor: {factor:.2f})")
-            
         nodes, faces, face_disps, visuals = TeachingPhysics.generate_component_mesh(L, sec_type, dims, load_type, load_val, struct_type, factor=factor)
-        fig = create_plot(nodes, faces, face_disps, visuals, L, struct_type, color_mode=current_color_mode)
+        
+        # 转换为带渲染因子的英文标题
+        en_title = f"{EN_STRUCT[struct_type]} Response: {EN_LOAD[load_type]} ({EN_SEC[sec_type]}) [Animating: {factor:.2f}]"
+        fig = create_plot(nodes, faces, face_disps, visuals, L, struct_type, color_mode=current_color_mode, title_en=en_title)
+        
         plot_placeholder.pyplot(fig)
         plt.close(fig) 
         time.sleep(0.05)
