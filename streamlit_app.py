@@ -1,10 +1,24 @@
+# 3D梁柱变形分析Streamlit完整程序，中文修复版
 import streamlit as st
 import numpy as np
+
+# ===================== 中文修复核心配置 顺序绝对不能乱 =====================
+# 1. 先设置matplotlib后端（必须在导入pyplot之前）
 import matplotlib
+matplotlib.use('Agg')
+
+# 2. 导入pyplot后立即设置中文字体
 import matplotlib.pyplot as plt
+# 强制指定中文字体，优先用部署环境安装的思源黑体，兜底兼容本地字体
+plt.rcParams['font.sans-serif'] = ['Noto Sans CJK SC', 'SimHei', 'WenQuanYi Micro Hei', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False  # 额外修复：负号不显示/变成方框的问题
+# ============================================================================
+
+# 后面的其他导入和你的原代码完全不变，不用改
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-import time
+
+# 下面的所有计算类、绘图函数、界面代码，原封不动保留即可
 
 # ==========================================
 # 0. 全局配置与状态初始化
