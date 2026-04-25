@@ -10,7 +10,7 @@ import time
 # ==========================================
 st.set_page_config(page_title="3D梁柱变形分析平台", layout="wide")
 
-# 移除中文字体配置，确保 Linux 服务器渲染纯英文时不报错
+# 彻底移除中文字体配置，确保云端 Linux 服务器渲染纯英文时不报错
 plt.rcParams['axes.unicode_minus'] = False
 
 if 'view_angles' not in st.session_state:
@@ -30,7 +30,7 @@ EN_SEC = {
 }
 
 # ==========================================
-# 2. 物理引擎核心库 (计算逻辑完全不变)
+# 2. 物理引擎核心库 (完全保留)
 # ==========================================
 class TeachingPhysics:
     @staticmethod
@@ -155,7 +155,7 @@ class TeachingPhysics:
         return nodes, faces, face_disps, visuals
 
 # ==========================================
-# 3. 绘图函数 (标题和图例全英文，图文不剥离)
+# 3. 绘图函数 (标题和图例全英文)
 # ==========================================
 def create_plot(nodes, faces, face_disps, visuals, L, s_type, color_mode, title_en):
     fig = plt.figure(figsize=(8, 6), dpi=100)
@@ -164,7 +164,7 @@ def create_plot(nodes, faces, face_disps, visuals, L, s_type, color_mode, title_
     ax.set_title(title_en, pad=15, fontsize=12, fontweight='bold')
 
     if len(faces) > 0:
-        if color_mode == '变形位移云图(按大小着色)':
+        if color_mode == '变形位移云图 (按大小着色)':
             cmap = plt.get_cmap('jet')
             colors = cmap(face_disps)
             mesh = Poly3DCollection(faces, alpha=0.9, facecolor=colors, edgecolor='k', linewidths=0.1)
@@ -198,7 +198,7 @@ def create_plot(nodes, faces, face_disps, visuals, L, s_type, color_mode, title_
     return fig
 
 # ==========================================
-# 4. Streamlit 侧边栏与交互 UI (保持纯中文)
+# 4. Streamlit 侧边栏与交互 UI
 # ==========================================
 st.sidebar.title("参数配置")
 model_type = st.sidebar.radio("选择模型类型", ["水平梁 (两端无约束)", "竖直柱 (底部固定)"])
@@ -229,7 +229,7 @@ if st.sidebar.button("显示初始模型", use_container_width=True): st.session
 st.sidebar.header("2. 施加荷载与高级渲染")
 load_type = st.sidebar.radio("选择受力", ["拉压", "剪切", "弯曲", "扭转"], index=2, horizontal=True)
 load_val = st.sidebar.number_input("荷载幅值 (+/-)", value=1.0, step=0.1)
-render_mode = st.sidebar.selectbox("渲染模式", ["变形位移云图(按大小着色)", "纯色显示"])
+render_mode = st.sidebar.selectbox("渲染模式", ["变形位移云图 (按大小着色)", "纯色显示"])
 
 c1, c2 = st.sidebar.columns(2)
 with c1: 
